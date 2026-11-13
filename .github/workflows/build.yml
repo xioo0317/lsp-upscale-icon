@@ -1,0 +1,113 @@
+name: build-lsp-module
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: API ${{ matrix.api }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 101 是用户指定的目标版本；102 为 libxposed 当前版本，一并出构件
+        include:
+          - api: 101
+            lib_version: '101.0.1'
+          - api: 102
+            lib_version: '102.0.0'
+        build_type: [ release ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Align module.prop with target API
+        # module.prop 的 targetApiVersion 必须与编译依赖一致，否则框架会
+        # 按 101 加载但代码按 102 编译（或反之），出现 NoSuchMethodError。
+        run: |
+          cat > app/src/main/resources/META-INF/xposed/module.prop <<EOF
+          minApiVersion=101
+          targetApiVersion=${{ matrix.api }}
+          staticScope=true
+          EOF
+          echo "--- module.prop ---"
+          cat app/src/main/resources/META-INF/xposed/module.prop
+
+      - name: Build ${{ matrix.build_type }} APK
+        run: |
+          ./gradlew :app:assemble${{ matrix.build_type == 'release' && 'Release' || 'Debug' }} \
+            --no-daemon --stacktrace \
+            -PxposedApiVersion=${{ matrix.lib_version }} \
+            -PxposedTargetApi=${{ matrix.api }}
+
+      - name: Verify APK contains libxposed metadata
+        # 关键自检：META-INF/xposed/* 三个文件必须在 APK 内，否则模块不会被框架识别
+        run: |
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -n1)
+          echo "APK=$APK"
+          test -n "$APK"
+          for f in module.prop java_init.list scope.list; do
+            if unzip -l "$APK" | grep -q "META-INF/xposed/$f"; then
+              echo "OK  META-INF/xposed/$f"
+            else
+              echo "MISSING META-INF/xposed/$f"; unzip -l "$APK" | grep -i xposed || true; exit 1
+            fi
+          done
+          echo "--- module.prop inside APK ---"
+          unzip -p "$APK" META-INF/xposed/module.prop
+          echo "--- java_init.list inside APK ---"
+          unzip -p "$APK" META-INF/xposed/java_init.list
+
+      - name: Rename artifact
+        run: |
+          mkdir -p ci-artifacts
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -n1)
+          cp "$APK" "ci-artifacts/UpscaleIcon-api${{ matrix.api }}-${{ matrix.build_type }}.apk"
+          sha256sum ci-artifacts/*.apk
+          ls -lh ci-artifacts/
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UpscaleIcon-api${{ matrix.api }}-${{ matrix.build_type }}
+          path: ci-artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ci-artifacts/*.apk
+          generate_release_notes: true

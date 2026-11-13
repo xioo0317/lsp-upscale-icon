@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">大图标放大</string>
+    <string name="module_desc">ColorOS 系统桌面 17.3.12：让 2x1 / 1x2 / 2x2 大图标直接放大原 1x1 图标，跳过主题素材裁切与材质高光层。基于 libxposed 现代 Xposed API 101。</string>
+</resources>

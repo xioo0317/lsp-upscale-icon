@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IDE
+.idea/
+*.iml
+local.properties
+.cxx/
+captures/
+
+# 构建产物（由 CI 产出为 artifact，不入库）
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.jks
+*.keystore
+
+# 本地构建日志
+build_local.log
+build_102.log
+
+# OS
+.DS_Store

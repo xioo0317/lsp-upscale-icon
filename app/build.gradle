@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+// libxposed API 版本。CI 通过 -PxposedApiVersion=102.0.0 覆盖以构建 102 变体。
+def xposedApiVersion = project.findProperty('xposedApiVersion') ?: '101.0.1'
+// module.prop 中声明的 targetApiVersion，须与编译依赖一致。
+def xposedTargetApi = project.findProperty('xposedTargetApi') ?: '101'
+
+android {
+    namespace 'cn.hy.upscaleicon'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'cn.hy.upscaleicon'
+        minSdk 27
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // CI 未提供签名密钥时用 debug 签名产出可直接安装的 APK；
+            // 本地若有 release keystore，可用 -PsignRelease=true 走正式签名。
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // 关键：把 META-INF/xposed/* 打进 APK。libxposed 框架从这几个文件里读取
+    // 入口类(java_init.list)、作用域(scope.list)、模块元数据(module.prop)。
+    // 默认 AGP 会排除部分 META-INF 文件，这里显式保留并禁止压缩。
+    packagingOptions {
+        resources {
+            // 官方 libxposed example 使用同一写法；避免多来源同名文件冲突
+            merges += 'META-INF/xposed/*'
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // 运行时由框架提供，绝不能打进 APK（会与框架的类冲突）
+    compileOnly "io.github.libxposed:api:${xposedApiVersion}"
+}
