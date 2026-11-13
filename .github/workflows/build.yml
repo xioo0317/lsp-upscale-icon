@@ -19,12 +19,16 @@ jobs:
       fail-fast: false
       matrix:
         # 101 是用户指定的目标版本；102 为 libxposed 当前版本，一并出构件
+        # 注意：include 的每一项都必须自带 build_type。
+        # 若另设 build_type: [release] 维度，两个 include 会合并到同一个
+        # 基础组合并相互覆盖，最终只产出最后一个 API 的构件。
         include:
           - api: 101
             lib_version: '101.0.1'
+            build_type: release
           - api: 102
             lib_version: '102.0.0'
-        build_type: [ release ]
+            build_type: release
 
     steps:
       - name: Checkout
